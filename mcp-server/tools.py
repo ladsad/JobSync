@@ -36,7 +36,8 @@ def fetch_greenhouse_postings(token: str, company_name: str) -> str:
                 inserted += 1
         except Exception as e:
             if "duplicate key value violates unique constraint" not in str(e):
-                print(f"Error inserting {job['url']}: {e}")
+                import sys
+                print(f"Error inserting {job['url']}: {e}", file=sys.stderr)
     return f"Fetched and inserted {inserted} new jobs for {company_name} from Greenhouse."
 
 @mcp.tool()
@@ -61,7 +62,8 @@ def fetch_lever_postings(token: str, company_name: str) -> str:
                 inserted += 1
         except Exception as e:
             if "duplicate key value violates unique constraint" not in str(e):
-                print(f"Error inserting {job['url']}: {e}")
+                import sys
+                print(f"Error inserting {job['url']}: {e}", file=sys.stderr)
     return f"Fetched and inserted {inserted} new jobs for {company_name} from Lever."
 
 @mcp.tool()

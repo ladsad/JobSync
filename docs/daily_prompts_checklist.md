@@ -4,7 +4,7 @@ Run these exact prompts in your Antigravity chat to operate the job search tool 
 
 ### 1. Morning Sync (Job Fetching)
 **Prompt:**
-> "Fetch new job postings from our tracked sources (Greenhouse for Vercel, Lever for Figma)."
+> "Fetch all jobs."
 
 ### 2. Candidate Evaluation (Scoring)
 **Prompt:**

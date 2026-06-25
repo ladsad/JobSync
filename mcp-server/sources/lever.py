@@ -24,5 +24,6 @@ def fetch_lever_jobs(board_token: str) -> List[Dict[str, Any]]:
             })
         return jobs
     except Exception as e:
-        print(f"Error fetching lever jobs for {board_token}: {e}")
+        import sys
+        print(f"Error fetching lever jobs for {board_token}: {e}", file=sys.stderr)
         return []

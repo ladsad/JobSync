@@ -24,7 +24,8 @@ def fetch_greenhouse_jobs(board_token: str) -> List[Dict[str, Any]]:
             })
         return jobs
     except Exception as e:
-        print(f"Error fetching greenhouse jobs for {board_token}: {e}")
+        import sys
+        print(f"Error fetching greenhouse jobs for {board_token}: {e}", file=sys.stderr)
         return []
 
 # If we need the full description, we might need to hit:
