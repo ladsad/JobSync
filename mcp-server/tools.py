@@ -8,6 +8,12 @@ from supabase_client import supabase
 # Initialize the MCP server
 mcp = FastMCP("JobSearch")
 
+TARGET_KEYWORDS = ["software", "engineer", "developer", "data", "machine learning", "ml", "ai", "backend", "fullstack", "full stack", "frontend"]
+
+def is_target_role(title: str) -> bool:
+    title_lower = title.lower()
+    return any(keyword in title_lower for keyword in TARGET_KEYWORDS)
+
 @mcp.tool()
 def fetch_greenhouse_postings(token: str, company_name: str) -> str:
     """Fetches jobs from Greenhouse API for a given board token and saves them to the database.
@@ -17,11 +23,13 @@ def fetch_greenhouse_postings(token: str, company_name: str) -> str:
         company_name: The human-readable company name (e.g. 'Vercel')
     """
     jobs = fetch_greenhouse_jobs(token)
-    for job in jobs:
+    target_jobs = [job for job in jobs if is_target_role(job.get("role_title", ""))]
+    
+    for job in target_jobs:
         job["company"] = company_name
     
     inserted = 0
-    for job in jobs:
+    for job in target_jobs:
         try:
             res = supabase.table("postings").upsert(job, on_conflict="url", ignore_duplicates=True).execute()
             if res.data:
@@ -40,11 +48,13 @@ def fetch_lever_postings(token: str, company_name: str) -> str:
         company_name: The human-readable company name (e.g. 'Figma')
     """
     jobs = fetch_lever_jobs(token)
-    for job in jobs:
+    target_jobs = [job for job in jobs if is_target_role(job.get("role_title", ""))]
+    
+    for job in target_jobs:
         job["company"] = company_name
     
     inserted = 0
-    for job in jobs:
+    for job in target_jobs:
         try:
             res = supabase.table("postings").upsert(job, on_conflict="url", ignore_duplicates=True).execute()
             if res.data:
@@ -152,5 +162,37 @@ def update_application(application_id: str, status: str, next_action: str = None
     if next_action_date is not None:
         data["next_action_date"] = next_action_date
         
+        
     response = supabase.table("applications").update(data).eq("id", application_id).execute()
     return f"Successfully updated application {application_id} to status {status}."
+
+TRACKED_COMPANIES = {
+    "greenhouse": [
+        {"token": "vercel", "name": "Vercel"},
+        {"token": "dropbox", "name": "Dropbox"}
+    ],
+    "lever": [
+        {"token": "figma", "name": "Figma"},
+        {"token": "canva", "name": "Canva"}
+    ]
+}
+
+@mcp.tool()
+def fetch_all_jobs() -> str:
+    """Fetches job postings from a predefined list of target companies in one step."""
+    results = []
+    for company in TRACKED_COMPANIES["greenhouse"]:
+        try:
+            res = fetch_greenhouse_postings(company["token"], company["name"])
+            results.append(res)
+        except Exception as e:
+            results.append(f"Error for {company['name']}: {str(e)}")
+            
+    for company in TRACKED_COMPANIES["lever"]:
+        try:
+            res = fetch_lever_postings(company["token"], company["name"])
+            results.append(res)
+        except Exception as e:
+            results.append(f"Error for {company['name']}: {str(e)}")
+            
+    return "\n".join(results)
