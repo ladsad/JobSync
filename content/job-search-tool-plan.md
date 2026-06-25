@@ -20,15 +20,16 @@ Personal tool for an India-based fresh graduate job search (SWE + Data/ML lanes)
 
 ## 2. Architecture
 
- **Pattern: decoupled task queue** , not direct phone→laptop calls.
+**Pattern: MCP-server architecture** driven by interactive IDE conversation.
 
 ```
-Phone (hosted page) → Hosted DB (queue + data) ← Laptop worker (polls/executes) → External APIs
+Phone (hosted page) → Hosted DB (Supabase) ← Laptop MCP Server ← Antigravity IDE (LLM)
 ```
 
-* Phone page never talks to the laptop directly. It reads/writes rows in a hosted database.
-* Laptop worker polls (or subscribes via realtime) for pending tasks, executes them using local network access, writes results back into the same database.
-* This means the laptop can be asleep/offline for hours — tasks just wait. No public port exposed on the laptop. No tunnel-uptime dependency.
+* The laptop runs an MCP server (Python, using the `mcp` SDK, stdio transport) that is launched by and connected to Antigravity IDE.
+* Antigravity's own chat model does the reasoning (scoring job fit, drafting outreach messages) interactively in conversation.
+* The MCP server only exposes mechanical tools for fetching job postings and reading/writing Supabase. 
+* No separate Gemini API key or cost is needed for this part, since Antigravity's existing model access is reused.
 
 **Stack**
 
@@ -36,15 +37,15 @@ Phone (hosted page) → Hosted DB (queue + data) ← Laptop worker (polls/execut
 | --------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | Hosted DB + API | Supabase (Postgres, free tier)                                           | Auto REST API + realtime + auth, no custom backend needed                    |
 | Hosted frontend | Static page on Vercel/Netlify                                            | Talks to Supabase directly from the browser, free tier                       |
-| Laptop worker   | Python script (`supabase-py`client)                                    | You're a dev, full control, reuses your existing Gemini/antigravity pipeline |
-| LLM             | Gemini (already set up with ATS skills)                                  | Reuse existing resume-tailoring pipeline                                     |
+| Laptop server   | Python script (`mcp` SDK)                                                | You're a dev, full control, integrates directly with Antigravity             |
+| LLM             | Antigravity (already set up)                                             | Reasoning and drafting happens interactively, zero additional LLM API costs  |
 | Job sources     | Greenhouse + Lever public job-board APIs, Adzuna API, Wellfound listings | Public/legitimate access, no scraping risk                                   |
 
 ## 3. Data model (Supabase tables)
 
-### `tasks`
+### `tasks` (Optional)
 
-Queue table — phone inserts rows, worker polls and updates status.
+Queue table — only needed if the phone page should be able to queue something for the MCP server/Antigravity to pick up later, rather than for routine operation.
 
 | column       | type      | notes                                                                |
 | ------------ | --------- | -------------------------------------------------------------------- |
@@ -105,7 +106,7 @@ Queue table — phone inserts rows, worker polls and updates status.
 ```
 job-hunt-tool/
 ├── README.md
-├── .env.example                 # SUPABASE_URL, SUPABASE_KEY, GEMINI_API_KEY — never commit real .env
+├── .env.example                 # SUPABASE_URL, SUPABASE_KEY — never commit real .env
 ├── .gitignore
 │
 ├── frontend/                    # hosted page, deployed to Vercel/Netlify
@@ -121,14 +122,11 @@ job-hunt-tool/
 │   ├── package.json
 │   └── vite.config.js
 │
-├── worker/                       # runs locally on your laptop
-│   ├── main.py                   # poll loop entrypoint
+├── mcp-server/                   # runs locally on your laptop, launched by Antigravity
+│   ├── main.py                   # MCP server entrypoint
 │   ├── config.py                 # loads .env
 │   ├── supabase_client.py
-│   ├── tasks/
-│   │   ├── fetch_jobs.py         # hits Greenhouse/Lever/Adzuna APIs, inserts into postings
-│   │   ├── score_postings.py     # calls Gemini, fills fit_score/fit_reasoning/resume_variant
-│   │   └── draft_outreach.py     # calls Gemini, fills contacts.message_draft
+│   ├── tools.py                  # exposes MCP tool functions
 │   ├── sources/
 │   │   ├── greenhouse.py
 │   │   ├── lever.py
@@ -140,56 +138,55 @@ job-hunt-tool/
 │   └── seed.sql                   # optional: a few example companies for greenhouse/lever
 │
 └── docs/
-    ├── setup.md                   # step-by-step: create Supabase project, deploy frontend, run worker
+    ├── setup.md                   # step-by-step: create Supabase project, deploy frontend, setup MCP
     └── company_sources.md         # your running list of companies + their ATS (greenhouse/lever/etc) and board tokens
 ```
+
+*Note: Register the server in Antigravity's `mcp_config.json` to enable the IDE to launch and communicate with it.*
 
 ## 5. Build order (phased)
 
 **Phase 0 — Foundation (~1 evening)**
 
 1. Create Supabase project, run `schema.sql`
-2. Get API keys (Supabase, Gemini) into `.env`
-3. Write `worker/supabase_client.py`, confirm you can insert/read a row from a script
+2. Get API keys (Supabase) into `.env`
+3. Write `mcp-server/supabase_client.py`, confirm you can insert/read a row from a script
 
-**Phase 1 — Job fetch + score (highest leverage, build first)**
+**Phase 1 — Job fetch + score (MCP Tools)**
 
 1. `sources/greenhouse.py` + `sources/lever.py`: hit public board APIs for a hand-picked list of ~15–20 companies relevant to you (`docs/company_sources.md`), normalize into `postings` rows
-2. `tasks/fetch_jobs.py`: orchestrates the above, dedupes by URL before inserting
-3. `tasks/score_postings.py`: for each new posting, call Gemini with your resume + posting description, get back `fit_score`, `fit_reasoning`, `resume_variant`
-4. Test end-to-end with a manually-inserted `fetch_jobs` task row, confirm scored postings appear
+2. `tools.py`: Implement MCP tool functions: `fetch_greenhouse_postings`, `fetch_lever_postings`, `get_pending_postings`, `save_posting_score`.
+3. Test the tools by invoking them conversationally from Antigravity. Ask Antigravity to fetch jobs and score them based on your resume.
 
-**Phase 2 — Minimal frontend**
+**Phase 2 — Minimal frontend (Read-mostly dashboard)**
 
 1. Vite + plain React (or plain HTML if you want zero build step) page deployed to Vercel
-2. Dashboard view: table of postings sorted by `fit_score`, a button that inserts a `fetch_jobs` task
-3. Confirm phone browser → Supabase → laptop worker → back to phone round-trip works
+2. Dashboard view: table of postings sorted by `fit_score`. 
+3. *Note: The frontend becomes a read-mostly dashboard rather than a trigger mechanism, since work is now driven by chatting in Antigravity rather than by the phone queuing tasks.*
 
 **Phase 3 — Outreach support**
 
 1. `contacts` table UI: manually add a name/company/LinkedIn URL after you find them via LinkedIn's Alumni tool
-2. `tasks/draft_outreach.py`: given a contact + target posting, generate a short personalized message
+2. `tools.py`: Implement `add_contact` and `save_message_draft`.
 3. Outreach view: shows draft, a "mark as sent" checkbox, follow-up date field
+4. Test drafting personalized messages by invoking the tool conversationally from Antigravity.
 
 **Phase 4 — Tracker**
 
-1. Simple table/kanban for `applications`, manually updated as things progress
-2. Daily view: "follow-ups due today" pulled from `contacts.follow_up_due`
+1. `tools.py`: Implement `list_followups_due` and `update_application`.
+2. Simple table/kanban for `applications`, manually updated as things progress
+3. Daily view: "follow-ups due today" pulled from `contacts.follow_up_due`
 
-**Phase 5 — polish (optional, only after the above is in daily use)**
+## 6. Tradeoffs of the MCP approach
 
-* Realtime subscriptions instead of polling, so the worker reacts within seconds of a task being queued
-* Daily auto-run of `fetch_jobs` + `score_postings` via a scheduled local cron, so the shortlist is fresh every morning without manually triggering it
+* **Pros**: No separate LLM API cost is required since reasoning occurs interactively in Antigravity. It results in better interactive quality for tasks like drafting outreach messages and drastically reduces the amount of backend logic needed.
+* **Cons**: Loses unattended or scheduled automation capabilities. Because nothing runs unless Antigravity is open and actively chatting, you cannot trigger background jobs remotely. 
 
-## 6. Operational notes
-
-* **Worker run mode** : simplest is a loop with `time.sleep(60)` between polls. If you want lower latency, use Supabase's realtime channel to get pushed new task rows instantly — only worth doing after Phase 2 works with plain polling.
-* **Cost** : Supabase free tier and Vercel free tier comfortably cover this scale. Gemini API calls are the only real cost, and you're already using that for resumes — same budget.
-* **Safety** : nothing here automates LinkedIn, Naukri, or Internshala actions. You still click connect/send/apply yourself for anything that touches those platforms' UI — keeps your accounts safe during an active search.
-* **Source list maintenance** : `docs/company_sources.md` is just a manually curated list (company name → ATS type → board token/slug). Add to it as you find companies worth tracking; this is low effort and keeps the fetch step honest instead of trying to auto-discover every company.
+*If scheduled/unattended automation (e.g., a daily 7am auto-shortlist) is wanted later, that would need a small separate script calling an LLM API directly, outside the MCP/Antigravity flow.*
 
 ## 7. Open decisions to confirm before building
 
 * Plain HTML/JS frontend vs React — React only worth it if you want to reuse component patterns; plain HTML+Supabase JS client is fine for 3 simple views
-* Polling interval for the worker (start at 60s, tune later)
 * Whether to also add USAJobs/government portals, or keep scope to private-sector SWE/Data roles for now
+* Whether to keep the `tasks` queue table at all, given the move to an interactive MCP architecture.
+* Whether unattended daily scheduling is a priority for v1 or a later addition.
