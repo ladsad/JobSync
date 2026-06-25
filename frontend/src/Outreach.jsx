@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabaseClient'
-import { Users, Send, CheckCircle, Linkedin } from 'lucide-react'
+import { Users, Send, CheckCircle, Link as LinkIcon } from 'lucide-react'
 
 export default function Outreach() {
   const [contacts, setContacts] = useState([])
@@ -62,7 +62,7 @@ export default function Outreach() {
             {contact.name}
             {contact.linkedin_url && (
               <a href={contact.linkedin_url} target="_blank" rel="noreferrer" style={{color: '#3b82f6', display: 'flex'}}>
-                <Linkedin size={16} />
+                <LinkIcon size={16} />
               </a>
             )}
           </h2>
