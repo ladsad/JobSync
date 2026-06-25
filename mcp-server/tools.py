@@ -110,3 +110,47 @@ def save_message_draft(contact_id: str, message_draft: str) -> str:
     """
     response = supabase.table("contacts").update({"message_draft": message_draft}).eq("id", contact_id).execute()
     return f"Successfully saved message draft for contact {contact_id}."
+
+@mcp.tool()
+def list_followups_due() -> List[Dict[str, Any]]:
+    """Lists contacts that are due for a follow-up today or earlier."""
+    from datetime import date
+    today = date.today().isoformat()
+    response = supabase.table("contacts").select("*").lte("follow_up_due", today).execute()
+    return response.data
+
+@mcp.tool()
+def create_application(posting_id: str, resume_version: str) -> str:
+    """Creates a new application record for a shortlisted job posting.
+    
+    Args:
+        posting_id: UUID of the job posting
+        resume_version: The version/variant of the resume used
+    """
+    data = {
+        "posting_id": posting_id,
+        "resume_version": resume_version,
+        "status": "applied"
+    }
+    response = supabase.table("applications").insert(data).execute()
+    supabase.table("postings").update({"status": "applied"}).eq("id", posting_id).execute()
+    return f"Created application for posting {posting_id}."
+
+@mcp.tool()
+def update_application(application_id: str, status: str, next_action: str = None, next_action_date: str = None) -> str:
+    """Updates the status and next action of a job application.
+    
+    Args:
+        application_id: UUID of the application
+        status: e.g., 'applied', 'interview_scheduled', 'interviewed', 'offer', 'rejected', 'ghosted'
+        next_action: Free text describing the next step
+        next_action_date: Date for the next action (YYYY-MM-DD)
+    """
+    data = {"status": status}
+    if next_action is not None:
+        data["next_action"] = next_action
+    if next_action_date is not None:
+        data["next_action_date"] = next_action_date
+        
+    response = supabase.table("applications").update(data).eq("id", application_id).execute()
+    return f"Successfully updated application {application_id} to status {status}."

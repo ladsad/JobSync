@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Dashboard from './Dashboard'
 import Outreach from './Outreach'
+import Tracker from './Tracker'
 import './index.css'
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
         <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
           <div>
             <h1>Job Intelligence</h1>
-            <p>Reviewing your matched postings and outreach from the MCP pipeline.</p>
+            <p>Reviewing your matched postings, outreach, and applications.</p>
           </div>
           
           <div className="status-badge">
@@ -47,11 +48,25 @@ function App() {
           >
             Outreach
           </button>
+          <button 
+            onClick={() => setActiveTab('tracker')}
+            style={{
+              background: 'none', border: 'none', 
+              color: activeTab === 'tracker' ? 'var(--accent-color)' : 'var(--text-secondary)', 
+              padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '1rem', fontWeight: 500,
+              borderBottom: activeTab === 'tracker' ? '2px solid var(--accent-color)' : '2px solid transparent',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Tracker
+          </button>
         </div>
       </header>
 
       {/* Content */}
-      {activeTab === 'dashboard' ? <Dashboard /> : <Outreach />}
+      {activeTab === 'dashboard' && <Dashboard />}
+      {activeTab === 'outreach' && <Outreach />}
+      {activeTab === 'tracker' && <Tracker />}
     </div>
   )
 }
