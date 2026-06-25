@@ -79,3 +79,34 @@ def save_posting_score(posting_id: str, fit_score: int, fit_reasoning: str, resu
     }
     response = supabase.table("postings").update(update_data).eq("id", posting_id).execute()
     return f"Successfully updated posting {posting_id} with score {fit_score}/10."
+
+@mcp.tool()
+def add_contact(name: str, company: str, linkedin_url: str, relation: str) -> str:
+    """Adds a new outreach contact to the database.
+    
+    Args:
+        name: Name of the contact
+        company: Company the contact works at
+        linkedin_url: URL to their LinkedIn profile
+        relation: e.g., 'alumni', 'near_peer', 'other'
+    """
+    data = {
+        "name": name,
+        "company": company,
+        "linkedin_url": linkedin_url,
+        "relation": relation,
+        "message_sent": False
+    }
+    response = supabase.table("contacts").insert(data).execute()
+    return f"Successfully added contact {name} at {company}."
+
+@mcp.tool()
+def save_message_draft(contact_id: str, message_draft: str) -> str:
+    """Saves an AI-generated outreach message draft for a specific contact.
+    
+    Args:
+        contact_id: UUID of the contact
+        message_draft: The text of the personalized message to send
+    """
+    response = supabase.table("contacts").update({"message_draft": message_draft}).eq("id", contact_id).execute()
+    return f"Successfully saved message draft for contact {contact_id}."
